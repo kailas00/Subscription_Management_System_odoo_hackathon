@@ -1,29 +1,25 @@
-// Placeholder handlers — return 501 until implemented.
-/* eslint-disable no-unused-vars */
 import { prisma } from '../../lib/prisma.js';
-import { asyncHandler, notImplemented, badRequest, notFound, conflict } from '../../lib/errors.js';
+import { asyncHandler, notFound } from '../../lib/errors.js';
 import { getPaging, paged, findPaged } from '../../lib/pagination.js';
 
-// GET /taxes?search=
-// order by name
-// return all (small table) but keep paged shape
 export const list = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  const paging = getPaging({ ...req.query, pageSize: req.query.pageSize || 100 });
+  paging.orderBy = [{ isActive: 'desc' }, { name: 'asc' }];
+  const where = paging.search ? { name: { contains: paging.search, mode: 'insensitive' } } : {};
+  const { rows, total } = await findPaged(prisma.tax, { where, paging });
+  paged(res, rows, total, paging);
 });
 
-// POST /taxes
 export const create = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  res.status(201).json({ data: await prisma.tax.create({ data: req.body }) });
 });
 
-// PATCH /taxes/:id
-// changing rate affects FUTURE invoices only (invoice lines store taxAmount snapshot)
 export const update = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  if (!(await prisma.tax.findUnique({ where: { id: req.params.id } }))) throw notFound('Tax');
+  res.json({ data: await prisma.tax.update({ where: { id: req.params.id }, data: req.body }) });
 });
 
-// DELETE /taxes/:id
-// isActive=false
 export const archive = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  if (!(await prisma.tax.findUnique({ where: { id: req.params.id } }))) throw notFound('Tax');
+  res.json({ data: await prisma.tax.update({ where: { id: req.params.id }, data: { isActive: false } }) });
 });

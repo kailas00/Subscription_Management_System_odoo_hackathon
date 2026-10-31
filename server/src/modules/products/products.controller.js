@@ -1,57 +1,74 @@
-// Placeholder handlers — return 501 until implemented.
-/* eslint-disable no-unused-vars */
 import { prisma } from '../../lib/prisma.js';
-import { asyncHandler, notImplemented, badRequest, notFound, conflict } from '../../lib/errors.js';
+import { asyncHandler, badRequest, conflict, notFound } from '../../lib/errors.js';
 import { getPaging, paged, findPaged } from '../../lib/pagination.js';
 
-// GET /products?search=&type=&active=
-// default active=true
-// include tax {id,name,rate,type}, variants
-// _count subscriptionLines
+const include = { tax: { select: { id: true, name: true, rate: true, type: true } }, variants: { orderBy: [{ attribute: 'asc' }, { value: 'asc' }] } };
+
+async function ensureTax(taxId) {
+  if (taxId && !(await prisma.tax.findUnique({ where: { id: taxId } }))) throw badRequest('Selected tax does not exist');
+}
+async function findProduct(id) {
+  const p = await prisma.product.findUnique({ where: { id } });
+  if (!p) throw notFound('Product');
+  return p;
+}
+async function findVariant(productId, variantId) {
+  const v = await prisma.productVariant.findUnique({ where: { id: variantId } });
+  if (!v || v.productId !== productId) throw notFound('Variant');
+  return v;
+}
+
 export const list = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  const paging = getPaging(req.query);
+  if (!req.query.sort) paging.orderBy = { name: 'asc' };
+  const where = {
+    isActive: req.query.active === 'false' ? false : true,
+    ...(req.query.type && { type: req.query.type }),
+    ...(paging.search && { name: { contains: paging.search, mode: 'insensitive' } }),
+  };
+  const { rows, total } = await findPaged(prisma.product, { where, include: { ...include, _count: { select: { subscriptionLines: true } } }, paging });
+  paged(res, rows, total, paging);
 });
 
-// GET /products/:id
-// include tax, variants (ordered attribute, value)
 export const get = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  const product = await prisma.product.findUnique({ where: { id: req.params.id }, include });
+  if (!product) throw notFound('Product');
+  res.json({ data: product });
 });
 
-// POST /products
-// validate taxId exists if given
-// return with tax + variants
 export const create = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await ensureTax(req.body.taxId);
+  res.status(201).json({ data: await prisma.product.create({ data: req.body, include }) });
 });
 
-// PATCH /products/:id
-// price changes DO NOT alter existing subscription lines (they keep their snapshot unitPrice)
 export const update = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await findProduct(req.params.id);
+  await ensureTax(req.body.taxId);
+  res.json({ data: await prisma.product.update({ where: { id: req.params.id }, data: req.body, include }) });
 });
 
-// DELETE /products/:id
-// soft delete: isActive=false (never hard delete — invoices reference products)
 export const archive = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await findProduct(req.params.id);
+  res.json({ data: await prisma.product.update({ where: { id: req.params.id }, data: { isActive: false } }) });
 });
 
-// POST /products/:id/variants
-// unique (productId, attribute, value) -> 409 'This variant already exists'
-// example: Brand / Odoo / extraPrice 560
 export const addVariant = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await findProduct(req.params.id);
+  const dup = await prisma.productVariant.findFirst({ where: { productId: req.params.id, attribute: req.body.attribute, value: req.body.value } });
+  if (dup) throw conflict('This variant already exists');
+  res.status(201).json({ data: await prisma.productVariant.create({ data: { ...req.body, productId: req.params.id } }) });
 });
 
-// PATCH /products/:id/variants/:variantId
-// ensure variant.productId === :id else 404
 export const updateVariant = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await findVariant(req.params.id, req.params.variantId);
+  res.json({ data: await prisma.productVariant.update({ where: { id: req.params.variantId }, data: req.body }) });
 });
 
-// DELETE /products/:id/variants/:variantId
-// if used by subscription lines -> 409 'Variant is used by subscriptions'
 export const removeVariant = asyncHandler(async (req, res) => {
-  throw notImplemented();
+  await findVariant(req.params.id, req.params.variantId);
+  const used = await prisma.subscriptionLine.count({ where: { variantId: req.params.variantId } })
+    + await prisma.templateLine.count({ where: { variantId: req.params.variantId } });
+  if (used) throw conflict('This variant is used by subscriptions or templates and cannot be removed');
+  await prisma.productVariant.delete({ where: { id: req.params.variantId } });
+  res.json({ data: { id: req.params.variantId } });
 });
