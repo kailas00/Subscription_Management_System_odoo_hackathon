@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Brightloop tokens ── warm paper ground, deep "loop" green rail, one teal brand, amber for attention.
+   Values are "R G B" so Tailwind can apply alpha: bg-brand/10 */
+:root {
+  --ground: 246 245 241;  --surface: 255 255 255;  --sunken: 239 238 232;
+  --ink: 22 32 30;        --muted: 88 101 97;      --faint: 135 146 142;   --line: 226 224 216;
+  --rail: 16 48 44;       --rail-ink: 226 238 234; --rail-muted: 143 176 168;
+  --brand: 15 107 95;     --brand-strong: 10 82 73; --brand-soft: 225 241 237;
+  --accent: 183 121 31;   --accent-soft: 250 239 220;
+  --ok: 31 122 77;        --ok-soft: 224 242 231;
+  --warn: 166 104 12;     --warn-soft: 252 240 214;
+  --bad: 180 35 24;       --bad-soft: 252 228 225;
+  --info: 47 94 140;      --info-soft: 226 236 247;
+  color-scheme: light;
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body { @apply bg-ground text-ink font-sans text-base; font-feature-settings: 'ss02'; }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.015em; }
+  ::selection { background: rgb(var(--brand) / 0.18); color: rgb(var(--ink)); }
+  :focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; border-radius: 6px; }
+  input, select, textarea { caret-color: rgb(var(--brand)); }
+  a { text-underline-offset: 3px; }
+  /* numbers in tables, totals, KPIs line up */
+  .num, td, .tabular { font-variant-numeric: tabular-nums; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 8px; border: 2px solid rgb(var(--ground)); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+}
+
+@layer components {
+  .card { @apply bg-surface rounded-lg shadow-card; }
+  .label { @apply block text-sm font-medium text-ink mb-1.5; }
+  .input {
+    @apply w-full h-9 rounded border border-line bg-surface px-3 text-base text-ink placeholder:text-faint
+      transition-colors hover:border-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20
+      disabled:bg-sunken disabled:text-muted;
+  }
+  .input[aria-invalid='true'] { @apply border-bad focus:ring-bad/20; }
+  .doc-no { @apply font-mono text-[0.8125rem] tracking-tight; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .card { box-shadow: none; }
+}
