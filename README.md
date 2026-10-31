@@ -28,11 +28,12 @@ Built for the Odoo Hackathon.
 
 ## Run it (Windows)
 
-1. Install [Node.js LTS](https://nodejs.org).
-2. Optional: [PostgreSQL](https://www.postgresql.org/download/) on port 5432 (user `postgres`, password `1234`, or set your own in `server/.env`). If PostgreSQL isn't running, a built-in database is used.
-3. Double-click **`run.bat`**.
+1. Install [Node.js LTS](https://nodejs.org). That is the only requirement.
+2. Double-click **`run.bat`**.
 
-The first run installs everything and loads demo data. After that, `run.bat` keeps your data and only applies updates. To start again with fresh demo data, run `run.bat reset`.
+The first run installs everything, creates the database and loads demo data. After that, `run.bat` keeps your data and only applies updates. `run.bat reset` starts again with fresh demo data.
+
+**Database, chosen automatically:** if PostgreSQL is running on port 5432 and accepts the address in `server/.env` (default user `postgres`, password `1234`), it is used. Otherwise Brightloop starts its own built-in PostgreSQL on port 5433, so there is no password or port to set. To use your own server with other settings, put its address in `DATABASE_URL` in `server/.env`.
 
 Open http://localhost:5173 and sign in with password **`Admin@1234`**:
 
