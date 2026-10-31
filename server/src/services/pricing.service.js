@@ -2,7 +2,7 @@
 // Pricing engine — PURE functions (no DB). Single source of truth for:
 //   • subscription totals shown on quotations
 //   • invoice lines generated on billing day
-//. Used by billing.service.js and the subscriptions module.
+// Used by billing.service.js and the subscriptions module.
 // Covered by pricing.service.test.js  →  npm test
 // ─────────────────────────────────────────────────────────────────────────────
 import { toNum, round2 } from '../lib/money.js';

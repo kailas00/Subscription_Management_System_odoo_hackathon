@@ -1,4 +1,3 @@
-// Implement customers.controller.js
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';

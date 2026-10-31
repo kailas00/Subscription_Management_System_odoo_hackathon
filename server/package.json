@@ -7,20 +7,24 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
-    "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test src/**/*.test.js",
+    "db:local": "node scripts/localdb.js",
+    "db:setup": "node scripts/setup-db.js",
+    "db:update": "node scripts/setup-db.js --update"
   },
-  "prisma": { "seed": "node prisma/seed.js" },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "embedded-postgres": "18.6.0-beta.19",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
@@ -31,5 +35,8 @@
   },
   "devDependencies": {
     "prisma": "^5.22.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

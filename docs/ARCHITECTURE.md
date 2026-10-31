@@ -4,8 +4,8 @@
  Browser (React SPA, Vite)                     Express API (Node)                         PostgreSQL
  ─────────────────────────                     ───────────────────                        ──────────
  pages/* ──► api/endpoints.js ──/api──►  routes.js ─► module.routes.js                    Prisma schema
-                (axios + JWT)                   │   authenticate → authorize(role)         (indexes on every
- AuthContext (token, role)                      │   validate(zod)                           list filter)
+                (axios, cookie)                 │   authenticate → authorize(role)         (indexes on every
+ AuthContext (user, role)                       │   validate(zod)                           list filter)
  TanStack Query (cache, paging)                 ▼
                                            module.controller.js ──► services/
                                                                      ├ pricing.service   (pure maths, unit-tested)
@@ -20,7 +20,7 @@
 ## Data model (17 tables)
 
 `User` (login, role) ─1:1─ `Customer` (billing contact; can exist without a login)
-`Product` ─< `ProductVariant` (attribute/value/extraPrice) · `Product` → default `Tax`
+`Product` ─< `ProductVariant` (attribute/value/extraPrice) · `Product` → default `Tax` · catalog fields (tagline, features, picture, photo, inCatalog)
 `Plan` (price, period, interval, min qty, availability, autoClose/closable/pausable/renewable)
 `Discount` (PERCENT|FIXED, PRODUCT|SUBSCRIPTION scope, min purchase/qty, dates, usageLimit/usedCount) >─< `Product`
 `QuotationTemplate` → `Plan`, ─< `TemplateLine`
@@ -55,6 +55,8 @@
 | Quotation accepted months later at an old price | `quotationValidUntil`; confirm is blocked when expired |
 | Customer sees another customer's invoice | Portal routes are CUSTOMER-only and every query is filtered by `req.user.customerId`; foreign IDs return 404 |
 | Internal staff creating discounts or staff accounts | Route-level `authorize('ADMIN')`, plus UI hides the controls |
+| Session token stolen by a script | JWT only in an httpOnly, SameSite cookie; Origin check on writes; password change invalidates old sessions |
+| Password guessing | Login and reset endpoints are rate-limited (429 after 10 tries) |
 | Leaking whether an email exists | Forgot-password always returns 200; login error is generic |
 | Reset link reused or stolen from the DB | Only a SHA-256 hash is stored; 30-minute expiry; cleared on use |
 | Deleting a product that old invoices reference | Soft delete (`isActive=false`) everywhere in the catalog |
@@ -73,3 +75,4 @@
 | Reports & dashboard | ✔ | ✔ | |
 | Run billing manually | ✔ | | |
 | Own subscriptions & invoices (portal), accept quote, pay | | | ✔ |
+| Request a new service from the catalog | | | ✔ |

@@ -1,4 +1,4 @@
-//. Demo + performance seed.
+// Demo + performance seed.
 //   npm run db:seed                  → realistic demo data (~40 subscriptions with invoice history)
 //   SEED_SCALE=5000 npm run db:seed  → also adds 5,000 bulk subscriptions to prove < 2s pages
 import 'dotenv/config';
@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { runBillingCycle, syncInvoicePayments } from '../src/services/billing.service.js';
 import { nextNumber } from '../src/lib/sequence.js';
 import { addDays, addPeriod, startOfDay } from '../src/lib/dates.js';
+import { ensureCatalog } from './catalog.js';
 
 const prisma = new PrismaClient();
 const PASSWORD = 'Admin@1234'; // meets policy: >8 chars, upper, lower, special
@@ -29,15 +30,10 @@ async function main() {
   const gst12 = await prisma.tax.create({ data: { name: 'GST 12%', type: 'PERCENT', rate: 12 } });
   await prisma.tax.create({ data: { name: 'Exempt', type: 'PERCENT', rate: 0 } });
 
-  const products = {
-    crm: await prisma.product.create({ data: { name: 'Loop CRM — seat', type: 'SOFTWARE', salesPrice: 1200, costPrice: 300, taxId: gst18.id, notes: 'Per user per period' } }),
-    erp: await prisma.product.create({ data: { name: 'Loop ERP Suite', type: 'SOFTWARE', salesPrice: 8500, costPrice: 2200, taxId: gst18.id } }),
-    storage: await prisma.product.create({ data: { name: 'Extra storage 100 GB', type: 'ADDON', salesPrice: 450, costPrice: 90, taxId: gst18.id } }),
-    support: await prisma.product.create({ data: { name: 'Priority support', type: 'SERVICE', salesPrice: 2500, costPrice: 1200, taxId: gst12.id } }),
-    connector: await prisma.product.create({ data: { name: 'ERP Connector', type: 'ADDON', salesPrice: 1500, costPrice: 400, taxId: gst18.id } }),
-  };
-  const odoo = await prisma.productVariant.create({ data: { productId: products.connector.id, attribute: 'Brand', value: 'Odoo', extraPrice: 560 } });
-  await prisma.productVariant.create({ data: { productId: products.connector.id, attribute: 'Brand', value: 'SAP', extraPrice: 900 } });
+  // Catalog: our own Loop apps + partner services sold under proxy brands (see prisma/catalog.js).
+  const products = await ensureCatalog(prisma);
+  const odoo = await prisma.productVariant.findFirst({ where: { productId: products.connector.id, value: 'Odoo' } });
+  void gst12;
 
   const monthly = await prisma.plan.create({ data: { name: 'Monthly Standard', billingPeriod: 'MONTHLY', minQuantity: 1, pausable: true, closable: true, renewable: true } });
   const yearly = await prisma.plan.create({ data: { name: 'Annual Enterprise', price: 5000, billingPeriod: 'YEARLY', minQuantity: 5, autoClose: true, closable: false, renewable: true } });
@@ -50,7 +46,9 @@ async function main() {
   await prisma.quotationTemplate.create({ data: { name: 'Enterprise starter pack', validityDays: 30, planId: yearly.id, notes: 'ERP + 10 CRM seats + support',
     lines: { create: [{ productId: products.erp.id, quantity: 1 }, { productId: products.crm.id, quantity: 10 }, { productId: products.support.id, quantity: 1 }] } } });
   await prisma.quotationTemplate.create({ data: { name: 'Small business monthly', validityDays: 14, planId: monthly.id,
-    lines: { create: [{ productId: products.crm.id, quantity: 3 }, { productId: products.storage.id, quantity: 1 }] } } });
+    lines: { create: [{ productId: products.crm.id, quantity: 3 }, { productId: products.storage.id, quantity: 3 }, { productId: products.vault.id, quantity: 3 }] } } });
+  await prisma.quotationTemplate.create({ data: { name: 'Creative studio monthly', validityDays: 14, planId: monthly.id, notes: 'Design apps, storage and device cover',
+    lines: { create: [{ productId: products.creative.id, quantity: 4 }, { productId: products.storage.id, quantity: 4 }, { productId: products.care.id, quantity: 4 }] } } });
 
   const companies = ['Meera Designs', 'Northwind Traders', 'Kaveri Foods', 'Pixel Forge', 'Sahyadri Logistics', 'Bluefin Retail', 'Orchid Clinics',
     'Tandem Labs', 'Granite Works', 'Saffron Hotels', 'Monsoon Media', 'Indus Textiles', 'Cobalt Fintech', 'Lotus Schools', 'Everest Auto'];
@@ -59,7 +57,7 @@ async function main() {
     customers.push(await prisma.customer.create({ data: {
       name: companies[i], company: companies[i], email: i === 0 ? custUser.email : `billing@${companies[i].toLowerCase().replace(/\s+/g, '')}.in`,
       phone: `+91 98${String(10000000 + i * 734521).slice(0, 8)}`, city: pick(['Mumbai', 'Bengaluru', 'Pune', 'Chennai', 'Delhi'], i), country: 'India',
-      userId: i === 0 ? custUser.id : undefined } }));
+      userId: i === 0 ? custUser.id : undefined, createdAt: addDays(startOfDay(), -(420 - i * 18)) } }));
   }
 
   console.log('🧾 Creating subscriptions…');
@@ -71,17 +69,23 @@ async function main() {
     const startDate = addDays(today, -(15 + ((i * 17) % 150)));
     const seats = plan === yearly ? 10 + (i % 6) : 1 + (i % 12);
     const lines = [{ productId: products.crm.id, quantity: seats, unitPrice: 1200, taxId: gst18.id }];
-    if (i % 3 === 0) lines.push({ productId: products.storage.id, quantity: 1 + (i % 3), unitPrice: 450, taxId: gst18.id });
+    if (i % 3 === 0) lines.push({ productId: products.storage.id, quantity: seats, unitPrice: 249, taxId: gst18.id });
+    if (i % 5 === 0 || i % 6 === 0) lines.push({ productId: products.creative.id, quantity: 1 + (i % 4), unitPrice: 1999, taxId: gst18.id });
+    if (i % 6 === 0 || i % 7 === 3) lines.push({ productId: products.care.id, quantity: 2 + (i % 5), unitPrice: 799, taxId: gst18.id });
+    if (i % 4 === 2) lines.push({ productId: products.meet.id, quantity: 1 + (i % 3), unitPrice: 650, taxId: gst18.id });
+    if (i % 8 === 5) lines.push({ productId: products.vault.id, quantity: seats, unitPrice: 180, taxId: gst18.id });
+    if (i % 9 === 4) lines.push({ productId: products.music.id, quantity: 1 + (i % 2), unitPrice: 499, taxId: gst12.id });
     if (i % 4 === 0) lines.push({ productId: products.connector.id, variantId: odoo.id, quantity: 1, unitPrice: 2060, taxId: gst18.id });
     if (plan === yearly) lines.push({ productId: products.erp.id, quantity: 1, unitPrice: 8500, taxId: gst18.id });
 
     const sub = await prisma.subscription.create({ data: {
-      number: await nextNumber('SUB', prisma), customerId: pick(customers, i).id, planId: plan.id, salespersonId: staff.id,
+      number: await nextNumber('SUB', prisma), customerId: (i % 6 === 0 ? customers[0] : pick(customers, i)).id, planId: plan.id, salespersonId: staff.id,
       status: ['ACTIVE', 'PAUSED', 'CLOSED'].includes(status) ? 'ACTIVE' : status,
       startDate, expiryDate: plan === weekly ? addDays(startDate, 28) : addPeriod(startDate, 'YEARLY', 1),
       nextInvoiceDate: ['ACTIVE', 'PAUSED', 'CLOSED'].includes(status) ? startDate : null,
       paymentTermDays: pick([7, 15, 30], i), discountId: i % 9 === 0 ? welcome.id : null,
       quotationValidUntil: status === 'QUOTATION' ? addDays(today, 10) : null,
+      createdAt: addDays(startDate, -3),
       lines: { create: lines },
       events: { create: [{ toStatus: 'DRAFT', userId: staff.id, createdAt: addDays(startDate, -3) }] },
     } });
@@ -95,6 +99,14 @@ async function main() {
       await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, fromStatus: 'CONFIRMED', toStatus: 'ACTIVE', userId: staff.id, createdAt: startDate } });
     }
   }
+
+  // A request the demo customer made from the portal catalog — staff turn it into an offer
+  await prisma.subscription.create({ data: {
+    number: await nextNumber('SUB', prisma), customerId: customers[0].id, planId: monthly.id, salespersonId: staff.id, status: 'DRAFT',
+    requestedByCustomer: true, startDate: addDays(today, 3), paymentTermDays: 15, notes: 'Requested from the customer portal: “For our two new designers.”',
+    lines: { create: [{ productId: products.meet.id, quantity: 2, unitPrice: 650, taxId: gst18.id }] },
+    events: { create: [{ toStatus: 'DRAFT', userId: custUser.id, note: 'Requested by customer via portal' }] },
+  } });
 
   // Bill all history up to today (catch-up), then confirm & pay most, leaving some overdue.
   const run = await runBillingCycle({ asOf: today });
@@ -120,7 +132,7 @@ async function main() {
   for (let i = 0; i < subs.length; i++) {
     const status = pick(statuses, i);
     if (status === 'PAUSED' || status === 'CLOSED') {
-      await prisma.subscription.update({ where: { id: subs[i].id }, data: { status, ...(status === 'CLOSED' && { closedAt: today, closeReason: 'Customer moved to another vendor' }) } });
+      await prisma.subscription.update({ where: { id: subs[i].id }, data: { status, ...(status === 'CLOSED' && { closedAt: addDays(today, -(i % 40)), closeReason: 'Customer moved to another vendor' }) } });
       await prisma.subscriptionEvent.create({ data: { subscriptionId: subs[i].id, fromStatus: 'ACTIVE', toStatus: status, userId: staff.id } });
     }
   }

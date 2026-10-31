@@ -1,4 +1,4 @@
-//. Daily billing run (auto-close expired + generate due invoices).
+// Daily billing run (auto-close expired + generate due invoices).
 import cron from 'node-cron';
 import { env } from '../config/env.js';
 import { runBillingCycle } from '../services/billing.service.js';

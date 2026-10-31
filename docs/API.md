@@ -1,11 +1,11 @@
 # API contract
 
-Base URL `http://localhost:4000/api` (the web app calls `/api`, which Vite proxies). Auth header: `Authorization: Bearer <token>`.
+Base URL `http://localhost:4000/api` (the web app calls `/api`, which Vite proxies). Auth: the session is an httpOnly cookie (`bl_session`, 8 h) set by login/signup — the web app never sees the token.
 
 **Success:** `{ data }` · **List:** `{ data: [...], meta: { page, pageSize, total, totalPages } }` · **Error:** `{ error: { code, message, details?: [{ field, message }] } }`
 **List query (all list endpoints):** `page` (1), `pageSize` (20, max 100), `search`, `sort`, `order=asc|desc`
 **Roles:** `A` admin · `I` internal staff · `C` customer · `—` public. Money fields come back as strings ("1200.00") — use `Number()` or `lib/format.money()`.
-**Status codes:** 400 validation/business rule · 401 not logged in · 403 wrong role · 404 not found · 409 duplicate / in use · 501 not built yet
+**Status codes:** 400 validation/business rule · 401 not logged in · 403 wrong role · 404 not found · 409 duplicate / in use
 
 Frontend function names in brackets map to `client/src/api/endpoints.js`.
 
@@ -13,10 +13,11 @@ Frontend function names in brackets map to `client/src/api/endpoints.js`.
 
 | Method | Path | Role | Body → returns |
 |---|---|---|---|
-| POST | `/auth/signup` [authApi.signup] | — | `{ name, email, password, company?, phone? }` → `{ token, user }` (role CUSTOMER, Customer record linked) |
-| POST | `/auth/login` [login] | — | `{ email, password }` → `{ token, user: { id, email, name, role, customerId } }` |
+| POST | `/auth/signup` [authApi.signup] | — | `{ name, email, password, company?, phone? }` → `{ user }` + session cookie (role CUSTOMER, Customer record linked) |
+| POST | `/auth/login` [login] | — | `{ email, password }` → `{ user: { id, email, name, role, customerId } }` + session cookie |
 | POST | `/auth/forgot-password` | — | `{ email }` → always 200 (emails a 30-min link to `/reset-password?token=`) |
 | POST | `/auth/reset-password` | — | `{ token, password }` |
+| POST | `/auth/logout` | any | clears the session cookie |
 | GET | `/auth/me` | any | → user |
 | PATCH | `/auth/me` | any | `{ name }` |
 | POST | `/auth/change-password` | any | `{ currentPassword, newPassword }` |
@@ -102,7 +103,10 @@ Invoice status: `DRAFT → CONFIRMED → PAID` (or `CANCELLED`). **Overdue** = C
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/portal/summary` | `{ activeSubscriptions, pendingQuotations, outstanding, nextInvoiceDate, overdueCount }` |
-| GET | `/portal/subscriptions`, `/portal/subscriptions/:id` | no DRAFTs; detail includes `actions` limited to `confirm pause resume close` |
+| GET | `/portal/overview` | profile, next bill, 12-month spend, recent payments, account manager, public offers |
+| GET | `/portal/catalog` | services customers can add (picture, description, features, variants) + active plans |
+| POST | `/portal/requests` | `{ productId, variantId?, planId, quantity, note? }` → a DRAFT flagged `requestedByCustomer` for staff to price and send |
+| GET | `/portal/subscriptions`, `/portal/subscriptions/:id` | staff drafts hidden (the customer's own requests shown); detail includes `actions` limited to `confirm pause resume close` |
 | POST | `/portal/subscriptions/:id/actions/:action` | customer accepts a quotation (`confirm`) or pauses/resumes/closes if the plan allows |
 | GET | `/portal/invoices`, `/portal/invoices/:id` | no DRAFT/CANCELLED |
 | POST | `/portal/invoices/:id/pay` | `{ method: CARD\|UPI\|BANK_TRANSFER }` → demo payment of the full balance |

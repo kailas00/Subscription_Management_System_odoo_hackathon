@@ -54,7 +54,7 @@ export async function generateInvoiceForSubscription(subscriptionId, { asOf = ne
         productDiscounts: await activeProductDiscounts(tx), asOf,
       });
 
-      const invoiceDate = startOfDay(asOf) > periodStart ? startOfDay(asOf) : periodStart;
+      const invoiceDate = periodStart; // invoice is dated on its billing date, also when catching up
       const invoice = await tx.invoice.create({
         data: {
           number: await nextNumber('INV', tx),
@@ -177,7 +177,17 @@ export const decorateInvoice = (inv) => ({
  * Records a payment against an invoice in one transaction (used by staff payments and the customer portal).
  * Pass customerId to restrict to that customer's invoices. amount defaults to the full outstanding balance.
  */
-export async function recordPayment({ invoiceId, method, amount, paymentDate = new Date(), note = null, recordedById = null, customerId = null }) {
+export async function recordPayment(args, attempt = 1) {
+  try {
+    return await recordPaymentOnce(args);
+  } catch (e) {
+    // P2034: serialization conflict with a concurrent payment on the same invoice — retry with fresh numbers
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2034' && attempt < 3) return recordPayment(args, attempt + 1);
+    throw e;
+  }
+}
+
+async function recordPaymentOnce({ invoiceId, method, amount, paymentDate = new Date(), note = null, recordedById = null, customerId = null }) {
   return prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
     if (!inv || (customerId && inv.customerId !== customerId)) throw notFound('Invoice');
@@ -194,5 +204,5 @@ export async function recordPayment({ invoiceId, method, amount, paymentDate = n
     });
     const invoice = await syncInvoicePayments(tx, invoiceId);
     return { payment, invoice };
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
